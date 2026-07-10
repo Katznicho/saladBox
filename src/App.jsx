@@ -33,6 +33,23 @@ async function saveMenu(menu) {
   await window.storage.set(MENU_STORAGE_KEY, JSON.stringify(menu), true);
 }
 
+const PIN_STORAGE_KEY = 'admin_pin';
+const DEFAULT_PIN = '1234';
+
+async function loadPin() {
+  try {
+    const result = await window.storage.get(PIN_STORAGE_KEY, true);
+    if (result?.value && String(result.value).trim()) {
+      return String(result.value).trim();
+    }
+  } catch (e) { /* use default */ }
+  return DEFAULT_PIN;
+}
+
+async function savePin(pin) {
+  await window.storage.set(PIN_STORAGE_KEY, String(pin).trim(), true);
+}
+
 const ZONES = [
   { id: 'zone1', name: 'Zone 1 — Muyenga & Surroundings', fee: 3000, areas: 'Muyenga, Kisugu, Kiwafu, Bukasa, Kiwuliriza' },
   { id: 'zone2', name: 'Zone 2 — Near Neighbours', fee: 4000, areas: 'Kabalagala, Kansanga, Nsambya, Bunga, Buziga, Ggaba' },
@@ -94,6 +111,7 @@ function OrderForm({ onOrderPlaced, menu }) {
   const [submitting, setSubmitting] = useState(false);
   const [confirmed, setConfirmed] = useState(null);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
 
   // Build "Tomorrow" + next 6 days as quick-pick options
@@ -138,10 +156,52 @@ function OrderForm({ onOrderPlaced, menu }) {
   }, 0);
   const canSubmit = totalSaladItems > 0 && name.trim() && phone.trim() && zoneId && address.trim() && deliveryDate && paymentMethod;
 
+  const getMissingFields = () => {
+    const missing = [];
+    if (totalSaladItems <= 0) missing.push({ key: 'salad', label: 'at least one salad' });
+    if (!name.trim()) missing.push({ key: 'name', label: 'full name' });
+    if (!phone.trim()) missing.push({ key: 'phone', label: 'phone number' });
+    if (!zoneId) missing.push({ key: 'zone', label: 'delivery area / zone' });
+    if (!address.trim()) missing.push({ key: 'address', label: 'delivery address' });
+    if (!deliveryDate) missing.push({ key: 'date', label: 'delivery date' });
+    if (!paymentMethod) missing.push({ key: 'payment', label: 'payment method' });
+    return missing;
+  };
+
+  const clearFieldError = (key) => {
+    setFieldErrors(prev => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const attemptPlaceOrder = () => {
+    const missing = getMissingFields();
+    if (missing.length > 0) {
+      const errors = {};
+      missing.forEach(m => { errors[m.key] = true; });
+      setFieldErrors(errors);
+      const labels = missing.map(m => m.label);
+      const list = labels.length === 1
+        ? labels[0]
+        : labels.slice(0, -1).join(', ') + ' and ' + labels[labels.length - 1];
+      setError(`Please complete: ${list}.`);
+      const first = document.getElementById('field-' + missing[0].key);
+      if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    setFieldErrors({});
+    setError('');
+    setShowConfirmPopup(true);
+  };
+
   const handleSubmit = async () => {
     setError('');
-    if (!canSubmit) {
-      setError('Please fill in all fields and pick at least one salad.');
+    const missing = getMissingFields();
+    if (missing.length > 0) {
+      attemptPlaceOrder();
       return;
     }
     setSubmitting(true);
@@ -257,8 +317,12 @@ function OrderForm({ onOrderPlaced, menu }) {
             </div>
           ))}
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 10, paddingTop: 10, borderTop: '1px solid #e0e0dc', color: '#6b6b6b' }}>
-            <span>Delivery ({confirmed.zoneName.split('—')[0].trim()})</span>
-            <span>{fmt(confirmed.deliveryFee)}</span>
+            <span>Items subtotal</span>
+            <span>UGX {fmt(confirmed.itemsTotal ?? confirmed.items.reduce((s, it) => s + it.price * it.qty, 0))}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 6, color: '#6b6b6b' }}>
+            <span>Transport ({confirmed.zoneName.split('—')[0].trim()})</span>
+            <span>UGX {fmt(confirmed.deliveryFee || 0)}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 700, marginTop: 10, paddingTop: 10, borderTop: '1.5px solid #4e9d35', color: '#1a1a1a' }}>
             <span>Total</span>
@@ -292,16 +356,19 @@ function OrderForm({ onOrderPlaced, menu }) {
       </p>
 
       {/* Salad selection */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', color: '#4e9d35', marginBottom: 12 }}>
+      <div id="field-salad" style={{ marginBottom: 28 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', color: fieldErrors.salad ? '#c0392b' : '#4e9d35', marginBottom: 12 }}>
           1. Choose your Salad
         </div>
+        {fieldErrors.salad && (
+          <div style={{ fontSize: 12, color: '#c0392b', marginBottom: 8 }}>Please add at least one salad.</div>
+        )}
         {menu.filter(s => s.category === 'salad').map(s => {
           const qty = cart[s.id] || 0;
           return (
             <div key={s.id} style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              background: '#fff', border: '1px solid #e0e0dc', borderRadius: 10,
+              background: '#fff', border: fieldErrors.salad ? '1.5px solid #e07468' : '1px solid #e0e0dc', borderRadius: 10,
               padding: '12px 14px', marginBottom: 8,
             }}>
               <div style={{ flex: 1, marginRight: 12 }}>
@@ -311,7 +378,7 @@ function OrderForm({ onOrderPlaced, menu }) {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                 <button
-                  onClick={() => updateQty(s.id, -1)}
+                  onClick={() => { updateQty(s.id, -1); clearFieldError('salad'); }}
                   disabled={qty === 0}
                   style={{
                     width: 28, height: 28, borderRadius: '50%', border: '1px solid #d4d4d4',
@@ -321,7 +388,7 @@ function OrderForm({ onOrderPlaced, menu }) {
                 >−</button>
                 <span style={{ minWidth: 18, textAlign: 'center', fontWeight: 600, fontSize: 14 }}>{qty}</span>
                 <button
-                  onClick={() => updateQty(s.id, 1)}
+                  onClick={() => { updateQty(s.id, 1); clearFieldError('salad'); }}
                   style={{
                     width: 28, height: 28, borderRadius: '50%', border: 'none',
                     background: '#4e9d35', color: '#fff', fontSize: 16, cursor: 'pointer', lineHeight: 1,
@@ -377,29 +444,43 @@ function OrderForm({ onOrderPlaced, menu }) {
       </div>
 
       {/* Customer details */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', color: '#4e9d35', marginBottom: 12 }}>
+      <div id="field-name" style={{ marginBottom: 28 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', color: (fieldErrors.name || fieldErrors.phone) ? '#c0392b' : '#4e9d35', marginBottom: 12 }}>
           2. Your details
         </div>
         <input
           placeholder="Full name"
           value={name}
-          onChange={e => setName(e.target.value)}
-          style={inputStyle}
+          onChange={e => { setName(e.target.value); clearFieldError('name'); }}
+          style={{
+            ...inputStyle,
+            border: fieldErrors.name ? '1.5px solid #e07468' : inputStyle.border,
+            background: fieldErrors.name ? '#fdf6f5' : inputStyle.background,
+          }}
         />
+        {fieldErrors.name && <div style={{ fontSize: 12, color: '#c0392b', marginTop: -4, marginBottom: 8 }}>Full name is required.</div>}
         <input
+          id="field-phone"
           placeholder="Phone number (for delivery confirmation)"
           value={phone}
-          onChange={e => setPhone(e.target.value)}
-          style={inputStyle}
+          onChange={e => { setPhone(e.target.value); clearFieldError('phone'); }}
+          style={{
+            ...inputStyle,
+            border: fieldErrors.phone ? '1.5px solid #e07468' : inputStyle.border,
+            background: fieldErrors.phone ? '#fdf6f5' : inputStyle.background,
+          }}
         />
+        {fieldErrors.phone && <div style={{ fontSize: 12, color: '#c0392b', marginTop: -4, marginBottom: 8 }}>Phone number is required.</div>}
       </div>
 
       {/* Delivery zone */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', color: '#4e9d35', marginBottom: 12 }}>
+      <div id="field-zone" style={{ marginBottom: 28 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', color: (fieldErrors.zone || fieldErrors.address) ? '#c0392b' : '#4e9d35', marginBottom: 12 }}>
           3. Delivery zone
         </div>
+        {fieldErrors.zone && (
+          <div style={{ fontSize: 12, color: '#c0392b', marginBottom: 8 }}>Please select your delivery area.</div>
+        )}
 
         <div style={{ position: 'relative', marginBottom: 8 }}>
           <input
@@ -409,9 +490,15 @@ function OrderForm({ onOrderPlaced, menu }) {
               setAreaSearch(e.target.value);
               setShowAreaResults(true);
               if (zoneId) setZoneId(''); // clear confirmed zone while user is editing search
+              clearFieldError('zone');
             }}
             onFocus={() => setShowAreaResults(true)}
-            style={{ ...inputStyle, marginBottom: 0 }}
+            style={{
+              ...inputStyle,
+              marginBottom: 0,
+              border: fieldErrors.zone ? '1.5px solid #e07468' : inputStyle.border,
+              background: fieldErrors.zone ? '#fdf6f5' : inputStyle.background,
+            }}
           />
 
           {showAreaResults && areaSearch.trim().length > 0 && (
@@ -443,6 +530,7 @@ function OrderForm({ onOrderPlaced, menu }) {
                       setZoneId(a.zoneId);
                       setAreaSearch(a.areaName);
                       setShowAreaResults(false);
+                      clearFieldError('zone');
                     }}
                     style={{
                       width: '100%', textAlign: 'left', padding: '11px 14px', background: 'none',
@@ -483,6 +571,7 @@ function OrderForm({ onOrderPlaced, menu }) {
                   setZoneId(a.zoneId);
                   setAreaSearch(a.areaName);
                   setShowAreaResults(false);
+                  clearFieldError('zone');
                 }}
                 style={{
                   width: '100%', textAlign: 'left', padding: '9px 10px',
@@ -498,11 +587,17 @@ function OrderForm({ onOrderPlaced, menu }) {
         </details>
 
         <input
+          id="field-address"
           placeholder="Delivery address / landmark details"
           value={address}
-          onChange={e => setAddress(e.target.value)}
-          style={inputStyle}
+          onChange={e => { setAddress(e.target.value); clearFieldError('address'); }}
+          style={{
+            ...inputStyle,
+            border: fieldErrors.address ? '1.5px solid #e07468' : inputStyle.border,
+            background: fieldErrors.address ? '#fdf6f5' : inputStyle.background,
+          }}
         />
+        {fieldErrors.address && <div style={{ fontSize: 12, color: '#c0392b', marginTop: -4, marginBottom: 8 }}>Delivery address is required.</div>}
         <textarea
           placeholder="Any notes for your order (optional)"
           value={notes}
@@ -512,18 +607,21 @@ function OrderForm({ onOrderPlaced, menu }) {
       </div>
 
       {/* Delivery date */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', color: '#4e9d35', marginBottom: 12 }}>
+      <div id="field-date" style={{ marginBottom: 28 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', color: fieldErrors.date ? '#c0392b' : '#4e9d35', marginBottom: 12 }}>
           4. Delivery date
         </div>
+        {fieldErrors.date && (
+          <div style={{ fontSize: 12, color: '#c0392b', marginBottom: 8 }}>Please choose a delivery date.</div>
+        )}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {dateOptions.map(d => (
             <button
               key={d.iso}
-              onClick={() => setDeliveryDate(d.iso)}
+              onClick={() => { setDeliveryDate(d.iso); clearFieldError('date'); }}
               style={{
                 padding: '9px 14px', borderRadius: 20, fontSize: 12.5, fontWeight: 600,
-                border: deliveryDate === d.iso ? 'none' : '1px solid #e0e0dc',
+                border: deliveryDate === d.iso ? 'none' : fieldErrors.date ? '1.5px solid #e07468' : '1px solid #e0e0dc',
                 background: deliveryDate === d.iso ? '#4e9d35' : '#fff',
                 color: deliveryDate === d.iso ? '#fff' : '#1a1a1a',
                 cursor: 'pointer',
@@ -536,15 +634,18 @@ function OrderForm({ onOrderPlaced, menu }) {
       </div>
 
       {/* Payment method */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', color: '#4e9d35', marginBottom: 12 }}>
+      <div id="field-payment" style={{ marginBottom: 28 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', color: fieldErrors.payment ? '#c0392b' : '#4e9d35', marginBottom: 12 }}>
           5. Payment method
         </div>
+        {fieldErrors.payment && (
+          <div style={{ fontSize: 12, color: '#c0392b', marginBottom: 8 }}>Please select a payment method.</div>
+        )}
         {PAYMENT_METHODS.map(p => (
           <label key={p.id} style={{
             display: 'flex', alignItems: 'flex-start', gap: 10,
             background: paymentMethod === p.id ? '#eef6f0' : '#fff',
-            border: paymentMethod === p.id ? '1.5px solid #4e9d35' : '1px solid #e0e0dc',
+            border: paymentMethod === p.id ? '1.5px solid #4e9d35' : fieldErrors.payment ? '1.5px solid #e07468' : '1px solid #e0e0dc',
             borderRadius: 10, padding: '12px 14px', marginBottom: 8, cursor: 'pointer',
           }}>
             <input
@@ -552,7 +653,7 @@ function OrderForm({ onOrderPlaced, menu }) {
               name="payment"
               value={p.id}
               checked={paymentMethod === p.id}
-              onChange={() => setPaymentMethod(p.id)}
+              onChange={() => { setPaymentMethod(p.id); clearFieldError('payment'); }}
               style={{ marginTop: 3 }}
             />
             <div style={{ flex: 1 }}>
@@ -590,9 +691,13 @@ function OrderForm({ onOrderPlaced, menu }) {
                 </div>
               );
             })}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 5, color: 'rgba(255,255,255,0.6)', paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.15)' }}>
+              <span>Items subtotal</span>
+              <span>{fmt(itemsTotal)}</span>
+            </div>
             {zone && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 5, color: 'rgba(255,255,255,0.6)', paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.15)' }}>
-                <span>Delivery</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 5, color: 'rgba(255,255,255,0.6)' }}>
+                <span>Transport</span>
                 <span>{fmt(deliveryFee)}</span>
               </div>
             )}
@@ -605,16 +710,21 @@ function OrderForm({ onOrderPlaced, menu }) {
       </div>
 
       {error && (
-        <div style={{ color: '#c0392b', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{error}</div>
+        <div style={{
+          color: '#c0392b', fontSize: 13, marginBottom: 12, textAlign: 'left',
+          background: '#fdf0ee', border: '1px solid #f0c4bd', borderRadius: 10, padding: '12px 14px',
+        }}>
+          {error}
+        </div>
       )}
 
       <button
-        onClick={() => { if (canSubmit) setShowConfirmPopup(true); }}
-        disabled={submitting || !canSubmit}
+        onClick={attemptPlaceOrder}
+        disabled={submitting}
         style={{
-          width: '100%', background: canSubmit ? '#4e9d35' : '#a8c4b5', color: '#fff',
+          width: '100%', background: canSubmit ? '#4e9d35' : '#4e9d35', color: '#fff',
           border: 'none', padding: '14px', borderRadius: 10, fontSize: 15, fontWeight: 600,
-          cursor: submitting ? 'default' : 'pointer',
+          cursor: submitting ? 'default' : 'pointer', opacity: submitting ? 0.7 : 1,
         }}
       >
         {submitting ? 'Placing order...' : `Place order — UGX ${fmt(grandTotal)}`}
@@ -689,7 +799,7 @@ const inputStyle = {
   fontSize: 13.5, marginBottom: 8, outline: 'none', color: '#1a1a1a', background: '#fff',
 };
 
-function Dashboard({ menu, onMenuChange }) {
+function Dashboard({ menu, onMenuChange, adminPin, onPinChange }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -732,7 +842,13 @@ function Dashboard({ menu, onMenuChange }) {
 
   const ordersForDate = orders.filter(o => o.deliveryDate === activeDate);
   const filtered = ordersForDate.filter(o => filter === 'all' || o.status === filter);
+  const orderItemsTotal = (o) =>
+    o.itemsTotal ?? (o.items || []).reduce((sum, it) => sum + (it.price * it.qty), 0);
+  const orderDeliveryFee = (o) => o.deliveryFee || 0;
+
   const dateRevenue = ordersForDate.filter(o => o.status !== 'cancelled').reduce((sum, o) => sum + o.grandTotal, 0);
+  const dateItemsRevenue = ordersForDate.filter(o => o.status !== 'cancelled').reduce((sum, o) => sum + orderItemsTotal(o), 0);
+  const dateTransportRevenue = ordersForDate.filter(o => o.status !== 'cancelled').reduce((sum, o) => sum + orderDeliveryFee(o), 0);
 
   const formatDateLabel = (iso) => {
     if (!iso) return '';
@@ -759,8 +875,12 @@ function Dashboard({ menu, onMenuChange }) {
         <td style="padding:8px;border:1px solid #ddd;font-size:12px;">
           ${o.paymentMethodLabel || '—'}
         </td>
+        <td style="padding:8px;border:1px solid #ddd;text-align:right;font-size:12px;">
+          ${fmt(orderItemsTotal(o))}<br/>
+          <span style="color:#666;">+ ${fmt(orderDeliveryFee(o))} transport</span>
+        </td>
         <td style="padding:8px;border:1px solid #ddd;text-align:right;">
-          ${fmt(o.grandTotal)}
+          <strong>${fmt(o.grandTotal)}</strong>
         </td>
         <td style="padding:8px;border:1px solid #ddd;text-align:center;font-size:11px;">
           ${o.status === 'delivered' ? '✅ Delivered' : o.status === 'cancelled' ? '❌ Cancelled' : '⬜ Pending'}
@@ -801,17 +921,20 @@ function Dashboard({ menu, onMenuChange }) {
               <th>Order</th>
               <th>Delivery</th>
               <th>Payment</th>
+              <th style="text-align:right;">Items + Transport</th>
               <th style="text-align:right;">Total</th>
               <th>Done</th>
             </tr>
           </thead>
           <tbody>
-            ${rows || '<tr><td colspan="7" style="padding:16px;text-align:center;color:#999;">No orders for this day</td></tr>'}
+            ${rows || '<tr><td colspan="8" style="padding:16px;text-align:center;color:#999;">No orders for this day</td></tr>'}
           </tbody>
         </table>
         <div class="summary">
           <strong>Total orders:</strong> ${printOrders.length}
           ${cancelledCount > 0 ? ` (${cancelledCount} cancelled)` : ''} &nbsp;|&nbsp;
+          <strong>Items:</strong> UGX ${fmt(printOrders.filter(o => o.status !== 'cancelled').reduce((s, o) => s + orderItemsTotal(o), 0))} &nbsp;|&nbsp;
+          <strong>Transport:</strong> UGX ${fmt(printOrders.filter(o => o.status !== 'cancelled').reduce((s, o) => s + orderDeliveryFee(o), 0))} &nbsp;|&nbsp;
           <strong>Total revenue:</strong> UGX ${fmt(totalRevenue)}
         </div>
       </body>
@@ -852,10 +975,23 @@ function Dashboard({ menu, onMenuChange }) {
         >
           Menu
         </button>
+        <button
+          onClick={() => setDashTab('settings')}
+          style={{
+            padding: '7px 16px', borderRadius: 17, fontSize: 12, fontWeight: 800, border: 'none',
+            fontFamily: FONT_BODY, cursor: 'pointer',
+            background: dashTab === 'settings' ? '#4e9d35' : 'transparent',
+            color: dashTab === 'settings' ? '#fff' : '#6b6b6b',
+          }}
+        >
+          Settings
+        </button>
       </div>
 
       {dashTab === 'menu' ? (
         <MenuEditor menu={menu} onMenuChange={onMenuChange} />
+      ) : dashTab === 'settings' ? (
+        <PinSettings currentPin={adminPin} onPinChange={onPinChange} />
       ) : (
       <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 18 }}>
@@ -895,16 +1031,26 @@ function Dashboard({ menu, onMenuChange }) {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
         <div style={{ background: '#fff', border: '1px solid #e0e0dc', borderRadius: 10, padding: 14 }}>
           <div style={{ fontSize: 11, color: '#6b6b6b', textTransform: 'uppercase', letterSpacing: 1 }}>
             {activeDate ? formatDateLabel(activeDate) + ' Orders' : 'Orders'}
           </div>
           <div style={{ fontSize: 24, fontWeight: 700, color: '#1a1a1a', fontFamily: FONT_HEADING }}>{ordersForDate.length}</div>
         </div>
+        <div style={{ background: '#fff', border: '1px solid #e0e0dc', borderRadius: 10, padding: 14 }}>
+          <div style={{ fontSize: 11, color: '#6b6b6b', textTransform: 'uppercase', letterSpacing: 1 }}>Menu items</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: '#1a1a1a', fontFamily: FONT_HEADING }}>{fmt(dateItemsRevenue)}</div>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+        <div style={{ background: '#fff', border: '1.5px solid #4e9d35', borderRadius: 10, padding: 14 }}>
+          <div style={{ fontSize: 11, color: '#4e9d35', textTransform: 'uppercase', letterSpacing: 1 }}>Total transport</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: '#1a1a1a', fontFamily: FONT_HEADING }}>{fmt(dateTransportRevenue)}</div>
+        </div>
         <div style={{ background: '#1a1a1a', borderRadius: 10, padding: 14 }}>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: 1 }}>Revenue</div>
-          <div style={{ fontSize: 24, fontWeight: 700, color: '#4e9d35', fontFamily: FONT_HEADING }}>{fmt(dateRevenue)}</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: 1 }}>Total revenue</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: '#4e9d35', fontFamily: FONT_HEADING }}>{fmt(dateRevenue)}</div>
         </div>
       </div>
 
@@ -970,11 +1116,21 @@ function Dashboard({ menu, onMenuChange }) {
                   Note: {o.notes}
                 </div>
               )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: '1px solid #f0f0ec' }}>
-                <div style={{ fontSize: 11, color: '#a8a8a8' }}>
-                  {new Date(o.timestamp).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #f0f0ec' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#6b6b6b', marginBottom: 4 }}>
+                  <span>Menu items</span>
+                  <span>UGX {fmt(orderItemsTotal(o))}</span>
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#4e9d35' }}>UGX {fmt(o.grandTotal)}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#6b6b6b', marginBottom: 6 }}>
+                  <span>Transport</span>
+                  <span>UGX {fmt(orderDeliveryFee(o))}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontSize: 11, color: '#a8a8a8' }}>
+                    {new Date(o.timestamp).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#4e9d35' }}>Total UGX {fmt(o.grandTotal)}</div>
+                </div>
               </div>
               {o.status === 'pending' && (
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
@@ -1224,14 +1380,109 @@ function MenuEditor({ menu, onMenuChange }) {
   );
 }
 
-const DASHBOARD_PIN = '1234'; // TODO: change this to a real PIN only Salad Box staff know
+function PinSettings({ currentPin, onPinChange }) {
+  const [current, setCurrent] = useState('');
+  const [nextPin, setNextPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState(false);
 
-function PinGate({ onUnlock }) {
+  const handleSave = async () => {
+    setMessage('');
+    if (current !== currentPin) {
+      setMessage('Current PIN is incorrect.');
+      return;
+    }
+    if (!/^\d{4,8}$/.test(nextPin)) {
+      setMessage('New PIN must be 4–8 digits.');
+      return;
+    }
+    if (nextPin !== confirmPin) {
+      setMessage('New PIN and confirmation do not match.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await savePin(nextPin);
+      onPinChange(nextPin);
+      setCurrent('');
+      setNextPin('');
+      setConfirmPin('');
+      setMessage('PIN updated successfully.');
+    } catch (e) {
+      setMessage('Could not save PIN. Try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div>
+      <h2 style={{ fontFamily: FONT_HEADING, fontSize: 24, color: '#1a1a1a', marginBottom: 8 }}>Settings</h2>
+      <p style={{ color: '#6b6b6b', fontSize: 13, marginBottom: 20 }}>
+        Change the staff PIN used to unlock the dashboard. Share the new PIN only with Salad Box staff.
+      </p>
+      <div style={{ background: '#fff', border: '1px solid #e0e0dc', borderRadius: 12, padding: 16, maxWidth: 400 }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: '#1a1a1a' }}>Change admin PIN</div>
+        <input
+          type="password"
+          inputMode="numeric"
+          placeholder="Current PIN"
+          value={current}
+          onChange={e => setCurrent(e.target.value)}
+          style={{ ...inputStyle, letterSpacing: 3 }}
+        />
+        <input
+          type="password"
+          inputMode="numeric"
+          placeholder="New PIN (4–8 digits)"
+          value={nextPin}
+          onChange={e => setNextPin(e.target.value)}
+          style={{ ...inputStyle, letterSpacing: 3 }}
+        />
+        <input
+          type="password"
+          inputMode="numeric"
+          placeholder="Confirm new PIN"
+          value={confirmPin}
+          onChange={e => setConfirmPin(e.target.value)}
+          style={{ ...inputStyle, letterSpacing: 3 }}
+        />
+        {message && (
+          <div style={{
+            marginBottom: 12, padding: '10px 12px', borderRadius: 8, fontSize: 13,
+            background: message.includes('success') ? '#eef8ea' : '#fdf0ee',
+            color: message.includes('success') ? '#2d6a1f' : '#c0392b',
+          }}>
+            {message}
+          </div>
+        )}
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          style={{
+            width: '100%', background: '#4e9d35', color: '#fff', border: 'none',
+            padding: '12px', borderRadius: 8, fontWeight: 700, cursor: 'pointer',
+            fontFamily: FONT_BODY, opacity: saving ? 0.7 : 1,
+          }}
+        >
+          {saving ? 'Saving…' : 'Update PIN'}
+        </button>
+      </div>
+      <div style={{ marginTop: 20, fontSize: 12, color: '#6b6b6b', lineHeight: 1.5 }}>
+        Staff login URL: add <code style={{ background: '#f0f0ec', padding: '2px 6px', borderRadius: 4 }}>?admin=1</code> to your site link.
+        Default PIN before any change is <strong>1234</strong>.
+      </div>
+    </div>
+  );
+}
+
+function PinGate({ onUnlock, expectedPin }) {
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
 
   const handleSubmit = () => {
-    if (pin === DASHBOARD_PIN) {
+    if (pin === expectedPin) {
       setError('');
       onUnlock();
     } else {
@@ -1290,16 +1541,18 @@ export default function App() {
   const [view, setView] = useState('order');
   const [dashboardUnlocked, setDashboardUnlocked] = useState(false);
   const [menu, setMenu] = useState(DEFAULT_MENU);
-  const [menuReady, setMenuReady] = useState(false);
+  const [adminPin, setAdminPin] = useState(DEFAULT_PIN);
+  const [ready, setReady] = useState(false);
   const showAdmin = isAdminMode();
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const loaded = await loadMenu();
+      const [loadedMenu, loadedPin] = await Promise.all([loadMenu(), loadPin()]);
       if (!cancelled) {
-        setMenu(loaded);
-        setMenuReady(true);
+        setMenu(loadedMenu);
+        setAdminPin(loadedPin);
+        setReady(true);
       }
     })();
     return () => { cancelled = true; };
@@ -1342,13 +1595,13 @@ export default function App() {
         )}
       </div>
 
-      {!menuReady ? (
-        <div style={{ textAlign: 'center', padding: 48, color: '#6b6b6b', fontSize: 14 }}>Loading menu…</div>
+      {!ready ? (
+        <div style={{ textAlign: 'center', padding: 48, color: '#6b6b6b', fontSize: 14 }}>Loading…</div>
       ) : showAdmin && view === 'dashboard' ? (
         dashboardUnlocked ? (
-          <Dashboard menu={menu} onMenuChange={setMenu} />
+          <Dashboard menu={menu} onMenuChange={setMenu} adminPin={adminPin} onPinChange={setAdminPin} />
         ) : (
-          <PinGate onUnlock={() => setDashboardUnlocked(true)} />
+          <PinGate expectedPin={adminPin} onUnlock={() => setDashboardUnlocked(true)} />
         )
       ) : (
         <OrderForm onOrderPlaced={() => {}} menu={menu} />
