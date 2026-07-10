@@ -933,7 +933,7 @@ function Dashboard({ menu, onMenuChange, adminPin, onPinChange }) {
         <div class="summary">
           <strong>Total orders:</strong> ${printOrders.length}
           ${cancelledCount > 0 ? ` (${cancelledCount} cancelled)` : ''} &nbsp;|&nbsp;
-          <strong>Items:</strong> UGX ${fmt(printOrders.filter(o => o.status !== 'cancelled').reduce((s, o) => s + orderItemsTotal(o), 0))} &nbsp;|&nbsp;
+          <strong>Items sold:</strong> UGX ${fmt(printOrders.filter(o => o.status !== 'cancelled').reduce((s, o) => s + orderItemsTotal(o), 0))} &nbsp;|&nbsp;
           <strong>Transport:</strong> UGX ${fmt(printOrders.filter(o => o.status !== 'cancelled').reduce((s, o) => s + orderDeliveryFee(o), 0))} &nbsp;|&nbsp;
           <strong>Total revenue:</strong> UGX ${fmt(totalRevenue)}
         </div>
@@ -1039,7 +1039,7 @@ function Dashboard({ menu, onMenuChange, adminPin, onPinChange }) {
           <div style={{ fontSize: 24, fontWeight: 700, color: '#1a1a1a', fontFamily: FONT_HEADING }}>{ordersForDate.length}</div>
         </div>
         <div style={{ background: '#fff', border: '1px solid #e0e0dc', borderRadius: 10, padding: 14 }}>
-          <div style={{ fontSize: 11, color: '#6b6b6b', textTransform: 'uppercase', letterSpacing: 1 }}>Menu items</div>
+          <div style={{ fontSize: 11, color: '#6b6b6b', textTransform: 'uppercase', letterSpacing: 1 }}>Items Sold</div>
           <div style={{ fontSize: 20, fontWeight: 700, color: '#1a1a1a', fontFamily: FONT_HEADING }}>{fmt(dateItemsRevenue)}</div>
         </div>
       </div>
@@ -1118,7 +1118,7 @@ function Dashboard({ menu, onMenuChange, adminPin, onPinChange }) {
               )}
               <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #f0f0ec' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#6b6b6b', marginBottom: 4 }}>
-                  <span>Menu items</span>
+                  <span>Items sold</span>
                   <span>UGX {fmt(orderItemsTotal(o))}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#6b6b6b', marginBottom: 6 }}>
