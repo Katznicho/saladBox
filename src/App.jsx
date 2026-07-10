@@ -5,16 +5,33 @@ const LOGO_DATA_URI = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
 const FONT_HEADING = "'Fredoka One', cursive";
 const FONT_BODY = "'Nunito', sans-serif";
 
-const SALADS = [
+const MENU_STORAGE_KEY = 'menu_items';
+
+const DEFAULT_MENU = [
   { id: 'chicken', name: 'Chicken Salad', price: 20000, desc: 'Chicken, red onion, cucumber, tomato, black pepper, oregano, mayonnaise, chilli (optional)', category: 'salad' },
   { id: 'beef', name: 'Beef Salad', price: 20000, desc: 'Beef, red onion, cucumber, tomato, lettuce, black pepper, mayonnaise, chilli (optional)', category: 'salad' },
   { id: 'eggmeat', name: 'Egg & Meat Salad', price: 25000, desc: 'Egg, meat of choice, red onion, cucumber, lettuce, black pepper, mayonnaise, chilli (optional)', category: 'salad' },
   { id: 'pasta', name: 'Pasta Salad', price: 25000, desc: 'Pasta, meat of choice, red onion, cucumber, spring onion, mayonnaise, chilli (optional)', category: 'salad' },
-  { id: '5050', name: 'Double Meat Salad', price: 35000, desc: 'Beef & chicken, lettuce, cucumber & onion mix, mayo, black pepper, oregano — the works', category: 'salad' },
+  { id: '5050', name: '50:50 Meat Salad', price: 35000, desc: 'Beef & chicken, cucumber & onion mix, mayo, black pepper, oregano', category: 'salad' },
   { id: 'tea_apple', name: 'Apple & Cinnamon Ice Tea', price: 12000, desc: 'Crisp apple warmth with a cinnamon finish — 400ml, chilled', category: 'tea' },
   { id: 'tea_mint', name: 'Sweet Peppermint Ice Tea', price: 12000, desc: 'Cool, refreshing peppermint with a gentle sweetness — 400ml, chilled', category: 'tea' },
   { id: 'tea_raspberry', name: 'Raspberry Leaf Ice Tea', price: 12000, desc: 'Delicate raspberry with a smooth herbal note — 400ml, chilled', category: 'tea' },
 ];
+
+async function loadMenu() {
+  try {
+    const result = await window.storage.get(MENU_STORAGE_KEY, true);
+    if (result?.value) {
+      const parsed = JSON.parse(result.value);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) { /* use defaults */ }
+  return DEFAULT_MENU.map(item => ({ ...item }));
+}
+
+async function saveMenu(menu) {
+  await window.storage.set(MENU_STORAGE_KEY, JSON.stringify(menu), true);
+}
 
 const ZONES = [
   { id: 'zone1', name: 'Zone 1 — Muyenga & Surroundings', fee: 3000, areas: 'Muyenga, Kisugu, Kiwafu, Bukasa, Kiwuliriza' },
@@ -45,23 +62,25 @@ function fmt(n) {
 
 function Logo() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
       <img
         src={LOGO_DATA_URI}
         alt="Salad Box logo"
-        style={{ width: 40, height: 40, objectFit: 'contain', flexShrink: 0 }}
+        style={{ width: 56, height: 56, objectFit: 'contain', flexShrink: 0 }}
       />
-      <div>
-        <div style={{ fontFamily: FONT_HEADING, fontWeight: 400, fontSize: 19, color: '#1a1a1a', lineHeight: 1, letterSpacing: 0.5 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ fontFamily: FONT_HEADING, fontWeight: 400, fontSize: 22, color: '#1a1a1a', lineHeight: 1, letterSpacing: 0.5 }}>
           SALAD <span style={{ color: '#4e9d35' }}>BOX</span>
         </div>
-        <div style={{ fontFamily: FONT_BODY, fontSize: 10, letterSpacing: 1.5, color: '#6b6b6b', textTransform: 'uppercase', marginTop: 2 }}>Muyenga, Kampala</div>
+        <div style={{ fontFamily: FONT_BODY, fontSize: 11, letterSpacing: 1.2, color: '#6b6b6b', textTransform: 'uppercase' }}>
+          Muyenga, Kampala
+        </div>
       </div>
     </div>
   );
 }
 
-function OrderForm({ onOrderPlaced }) {
+function OrderForm({ onOrderPlaced, menu }) {
   const [cart, setCart] = useState({}); // saladId -> qty
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -104,7 +123,7 @@ function OrderForm({ onOrderPlaced }) {
   };
 
   const itemsTotal = Object.entries(cart).reduce((sum, [id, qty]) => {
-    const salad = SALADS.find(s => s.id === id);
+    const salad = menu.find(s => s.id === id);
     return sum + (salad ? salad.price * qty : 0);
   }, 0);
 
@@ -114,7 +133,7 @@ function OrderForm({ onOrderPlaced }) {
   const totalItems = Object.values(cart).reduce((a, b) => a + b, 0);
 
   const totalSaladItems = Object.entries(cart).reduce((sum, [id, qty]) => {
-    const item = SALADS.find(s => s.id === id);
+    const item = menu.find(s => s.id === id);
     return sum + (item && item.category === 'salad' ? qty : 0);
   }, 0);
   const canSubmit = totalSaladItems > 0 && name.trim() && phone.trim() && zoneId && address.trim() && deliveryDate && paymentMethod;
@@ -142,7 +161,7 @@ function OrderForm({ onOrderPlaced }) {
         address: address.trim(),
         notes: notes.trim(),
         items: Object.entries(cart).map(([id, qty]) => {
-          const s = SALADS.find(s => s.id === id);
+          const s = menu.find(s => s.id === id);
           return { id, name: s.name, price: s.price, qty };
         }),
         itemsTotal,
@@ -269,15 +288,15 @@ function OrderForm({ onOrderPlaced }) {
         SALAD BOX
       </h2>
       <p style={{ color: '#6b6b6b', fontSize: 13, marginBottom: 24 }}>
-        Pick your salads, add your details, and we'll get cooking.
+        Pick your salad, add your details, and we'll get cooking.
       </p>
 
       {/* Salad selection */}
       <div style={{ marginBottom: 28 }}>
         <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', color: '#4e9d35', marginBottom: 12 }}>
-          1. Choose your salads
+          1. Choose your Salad
         </div>
-        {SALADS.filter(s => s.category === 'salad').map(s => {
+        {menu.filter(s => s.category === 'salad').map(s => {
           const qty = cart[s.id] || 0;
           return (
             <div key={s.id} style={{
@@ -320,7 +339,7 @@ function OrderForm({ onOrderPlaced }) {
           Add an Ice Tea 🧊
         </div>
         <p style={{ fontSize: 12, color: '#6b6b6b', marginBottom: 12 }}>400ml — freshly brewed and chilled</p>
-        {SALADS.filter(s => s.category === 'tea').map(s => {
+        {menu.filter(s => s.category === 'tea').map(s => {
           const qty = cart[s.id] || 0;
           return (
             <div key={s.id} style={{
@@ -563,7 +582,7 @@ function OrderForm({ onOrderPlaced }) {
         ) : (
           <>
             {Object.entries(cart).map(([id, qty]) => {
-              const s = SALADS.find(s => s.id === id);
+              const s = menu.find(s => s.id === id);
               return (
                 <div key={id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 5, color: 'rgba(255,255,255,0.85)' }}>
                   <span>{qty}x {s.name}</span>
@@ -670,10 +689,11 @@ const inputStyle = {
   fontSize: 13.5, marginBottom: 8, outline: 'none', color: '#1a1a1a', background: '#fff',
 };
 
-function Dashboard() {
+function Dashboard({ menu, onMenuChange }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [dashTab, setDashTab] = useState('orders'); // 'orders' | 'menu'
 
   const loadOrders = async () => {
     setLoading(true);
@@ -809,6 +829,35 @@ function Dashboard() {
 
   return (
     <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 20px 60px' }}>
+      <div style={{ display: 'flex', gap: 4, background: '#f0f0ec', borderRadius: 20, padding: 3, marginBottom: 20, width: 'fit-content' }}>
+        <button
+          onClick={() => setDashTab('orders')}
+          style={{
+            padding: '7px 16px', borderRadius: 17, fontSize: 12, fontWeight: 800, border: 'none',
+            fontFamily: FONT_BODY, cursor: 'pointer',
+            background: dashTab === 'orders' ? '#4e9d35' : 'transparent',
+            color: dashTab === 'orders' ? '#fff' : '#6b6b6b',
+          }}
+        >
+          Orders
+        </button>
+        <button
+          onClick={() => setDashTab('menu')}
+          style={{
+            padding: '7px 16px', borderRadius: 17, fontSize: 12, fontWeight: 800, border: 'none',
+            fontFamily: FONT_BODY, cursor: 'pointer',
+            background: dashTab === 'menu' ? '#4e9d35' : 'transparent',
+            color: dashTab === 'menu' ? '#fff' : '#6b6b6b',
+          }}
+        >
+          Menu
+        </button>
+      </div>
+
+      {dashTab === 'menu' ? (
+        <MenuEditor menu={menu} onMenuChange={onMenuChange} />
+      ) : (
+      <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 18 }}>
         <h2 style={{ fontFamily: FONT_HEADING, fontSize: 24, color: '#1a1a1a' }}>Orders</h2>
         <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
@@ -979,6 +1028,198 @@ function Dashboard() {
           ))}
         </div>
       )}
+      </>
+      )}
+    </div>
+  );
+}
+
+function MenuEditor({ menu, onMenuChange }) {
+  const [items, setItems] = useState(menu);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [draft, setDraft] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [newItem, setNewItem] = useState({ name: '', price: '', desc: '', category: 'salad' });
+
+  useEffect(() => { setItems(menu); }, [menu]);
+
+  const persist = async (next) => {
+    setSaving(true);
+    setMessage('');
+    try {
+      await saveMenu(next);
+      setItems(next);
+      onMenuChange(next);
+      setMessage('Menu saved.');
+    } catch (e) {
+      setMessage('Could not save menu. Try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startEdit = (item) => {
+    setEditingId(item.id);
+    setDraft({ ...item, price: String(item.price) });
+    setAdding(false);
+  };
+
+  const saveEdit = async () => {
+    if (!draft.name.trim() || !draft.price) {
+      setMessage('Name and price are required.');
+      return;
+    }
+    const price = Number(String(draft.price).replace(/,/g, ''));
+    if (!Number.isFinite(price) || price < 0) {
+      setMessage('Enter a valid price.');
+      return;
+    }
+    const next = items.map(it =>
+      it.id === editingId
+        ? { ...it, name: draft.name.trim(), price, desc: draft.desc.trim(), category: draft.category }
+        : it
+    );
+    setEditingId(null);
+    setDraft(null);
+    await persist(next);
+  };
+
+  const removeItem = async (id) => {
+    if (!window.confirm('Remove this menu item? Customers will no longer see it.')) return;
+    await persist(items.filter(it => it.id !== id));
+  };
+
+  const addItem = async () => {
+    if (!newItem.name.trim() || !newItem.price) {
+      setMessage('Name and price are required.');
+      return;
+    }
+    const price = Number(String(newItem.price).replace(/,/g, ''));
+    if (!Number.isFinite(price) || price < 0) {
+      setMessage('Enter a valid price.');
+      return;
+    }
+    const id = 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    const next = [...items, {
+      id,
+      name: newItem.name.trim(),
+      price,
+      desc: newItem.desc.trim(),
+      category: newItem.category,
+    }];
+    setAdding(false);
+    setNewItem({ name: '', price: '', desc: '', category: 'salad' });
+    await persist(next);
+  };
+
+  const resetDefaults = async () => {
+    if (!window.confirm('Reset menu to the original Salad Box items?')) return;
+    await persist(DEFAULT_MENU.map(item => ({ ...item })));
+  };
+
+  const fieldStyle = { ...inputStyle, marginBottom: 8 };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
+        <h2 style={{ fontFamily: FONT_HEADING, fontSize: 24, color: '#1a1a1a' }}>Menu</h2>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button
+            onClick={() => { setAdding(true); setEditingId(null); setMessage(''); }}
+            style={{ fontSize: 12, color: '#4e9d35', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+          >
+            + Add item
+          </button>
+          <button
+            onClick={resetDefaults}
+            style={{ fontSize: 12, color: '#6b6b6b', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+          >
+            Reset defaults
+          </button>
+        </div>
+      </div>
+      <p style={{ color: '#6b6b6b', fontSize: 13, marginBottom: 16 }}>
+        Add, edit, or remove salads and ice teas. Changes show on the order form for customers.
+      </p>
+      {message && (
+        <div style={{
+          marginBottom: 12, padding: '10px 12px', borderRadius: 8, fontSize: 13,
+          background: message.includes('Could') || message.includes('required') || message.includes('valid') ? '#fdf0ee' : '#eef8ea',
+          color: message.includes('Could') || message.includes('required') || message.includes('valid') ? '#c0392b' : '#2d6a1f',
+        }}>
+          {message}
+        </div>
+      )}
+
+      {adding && (
+        <div style={{ background: '#fff', border: '1.5px solid #4e9d35', borderRadius: 12, padding: 14, marginBottom: 12 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, color: '#1a1a1a' }}>New menu item</div>
+          <input style={fieldStyle} placeholder="Name" value={newItem.name} onChange={e => setNewItem({ ...newItem, name: e.target.value })} />
+          <input style={fieldStyle} placeholder="Price (UGX)" inputMode="numeric" value={newItem.price} onChange={e => setNewItem({ ...newItem, price: e.target.value })} />
+          <textarea style={{ ...fieldStyle, minHeight: 64, resize: 'vertical' }} placeholder="Ingredients / description" value={newItem.desc} onChange={e => setNewItem({ ...newItem, desc: e.target.value })} />
+          <select style={fieldStyle} value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })}>
+            <option value="salad">Salad</option>
+            <option value="tea">Ice Tea</option>
+          </select>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={addItem} disabled={saving} style={{ flex: 1, background: '#4e9d35', color: '#fff', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>
+              {saving ? 'Saving…' : 'Save item'}
+            </button>
+            <button onClick={() => setAdding(false)} style={{ flex: 1, background: 'none', border: '1px solid #e0e0dc', padding: '10px', borderRadius: 8, cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {items.map(item => (
+        <div key={item.id} style={{
+          background: '#fff', border: '1px solid #e0e0dc', borderRadius: 12, padding: 14, marginBottom: 10,
+        }}>
+          {editingId === item.id && draft ? (
+            <>
+              <input style={fieldStyle} value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} />
+              <input style={fieldStyle} inputMode="numeric" value={draft.price} onChange={e => setDraft({ ...draft, price: e.target.value })} />
+              <textarea style={{ ...fieldStyle, minHeight: 64, resize: 'vertical' }} value={draft.desc} onChange={e => setDraft({ ...draft, desc: e.target.value })} />
+              <select style={fieldStyle} value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })}>
+                <option value="salad">Salad</option>
+                <option value="tea">Ice Tea</option>
+              </select>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={saveEdit} disabled={saving} style={{ flex: 1, background: '#4e9d35', color: '#fff', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+                <button onClick={() => { setEditingId(null); setDraft(null); }} style={{ flex: 1, background: 'none', border: '1px solid #e0e0dc', padding: '10px', borderRadius: 8, cursor: 'pointer' }}>
+                  Cancel
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, color: '#4e9d35', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
+                    {item.category === 'tea' ? 'Ice Tea' : 'Salad'}
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a1a' }}>{item.name}</div>
+                  <div style={{ fontSize: 12, color: '#6b6b6b', marginTop: 4, lineHeight: 1.4 }}>{item.desc || 'No description'}</div>
+                  <div style={{ fontSize: 13, color: '#4e9d35', fontWeight: 700, marginTop: 6 }}>UGX {fmt(item.price)}</div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <button onClick={() => startEdit(item)} style={{ fontSize: 12, color: '#4e9d35', background: 'none', border: '1px solid #c8e6d0', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontWeight: 600 }}>
+                    Edit
+                  </button>
+                  <button onClick={() => removeItem(item.id)} style={{ fontSize: 12, color: '#c0392b', background: 'none', border: '1px solid #f0c4bd', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontWeight: 600 }}>
+                    Remove
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -1039,17 +1280,39 @@ function PinGate({ onUnlock }) {
   );
 }
 
+function isAdminMode() {
+  if (typeof window === 'undefined') return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.get('admin') === '1';
+}
+
 export default function App() {
   const [view, setView] = useState('order');
   const [dashboardUnlocked, setDashboardUnlocked] = useState(false);
+  const [menu, setMenu] = useState(DEFAULT_MENU);
+  const [menuReady, setMenuReady] = useState(false);
+  const showAdmin = isAdminMode();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const loaded = await loadMenu();
+      if (!cancelled) {
+        setMenu(loaded);
+        setMenuReady(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf8', fontFamily: FONT_BODY }}>
-        <div style={{
-          background: '#fff', borderBottom: '2px solid #4e9d35', padding: '14px 20px',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10,
-        }}>
-          <Logo />
+      <div style={{
+        background: '#fff', borderBottom: '2px solid #4e9d35', padding: '14px 20px',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10,
+      }}>
+        <Logo />
+        {showAdmin && (
           <div style={{ display: 'flex', gap: 4, background: '#f0f0ec', borderRadius: 20, padding: 3 }}>
             <button
               onClick={() => setView('order')}
@@ -1076,15 +1339,20 @@ export default function App() {
               {dashboardUnlocked ? 'Dashboard' : '🔒 Dashboard'}
             </button>
           </div>
-        </div>
-
-        {view === 'order' ? (
-          <OrderForm onOrderPlaced={() => {}} />
-        ) : dashboardUnlocked ? (
-          <Dashboard />
-        ) : (
-          <PinGate onUnlock={() => setDashboardUnlocked(true)} />
         )}
       </div>
+
+      {!menuReady ? (
+        <div style={{ textAlign: 'center', padding: 48, color: '#6b6b6b', fontSize: 14 }}>Loading menu…</div>
+      ) : showAdmin && view === 'dashboard' ? (
+        dashboardUnlocked ? (
+          <Dashboard menu={menu} onMenuChange={setMenu} />
+        ) : (
+          <PinGate onUnlock={() => setDashboardUnlocked(true)} />
+        )
+      ) : (
+        <OrderForm onOrderPlaced={() => {}} menu={menu} />
+      )}
+    </div>
   );
 }
